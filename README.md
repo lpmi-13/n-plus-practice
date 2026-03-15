@@ -29,6 +29,39 @@ That's it. You're ready to start the exercises.
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
 
+## Local Setup With uv
+
+The app can also run locally without Docker. In that mode Django falls back to SQLite unless you set `DATABASE_URL`.
+
+For Debian/Ubuntu, install the system packages the video pipeline needs:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ffmpeg pkg-config libcairo2-dev libpango1.0-dev espeak-ng
+```
+
+Then sync the Python environment with `uv`:
+
+```bash
+# App + tests
+uv sync
+
+# App + tests + video pipeline
+uv sync --extra video
+
+# App + tests + video pipeline + local Kokoro TTS
+uv sync --extra video --extra kokoro
+```
+
+If you prefer not to activate `.venv`, run commands through `uv run`:
+
+```bash
+uv run python manage.py migrate
+uv run python manage.py seed_db
+uv run python manage.py runserver
+uv run python -m walkthroughs.cli generate --exercise 01_basic --tts-backend kokoro
+```
+
 ## Exercises
 
 Work through these in order — each builds on the previous one:
@@ -107,16 +140,25 @@ Each exercise has an auto-generated video walkthrough with narration. The pipeli
 
 ### Prerequisites
 
-Install the video pipeline dependencies (in addition to the main app):
+If you're using `uv`, install the video pipeline dependencies with:
 
 ```bash
-pip install -r requirements-video.txt
+uv sync --extra video
 ```
 
-To use the local Kokoro TTS engine instead of edge-tts, also install:
+To generate narration locally with Kokoro, include the Kokoro extra too:
 
 ```bash
-pip install kokoro>=0.8 numpy
+uv sync --extra video --extra kokoro
+```
+
+The first Kokoro run still needs network access to populate its local cache (model/voice assets from Hugging Face and the English spaCy model used by Misaki). After that warm-up step, narration generation runs locally.
+
+If you're using `pip` instead of `uv`, use:
+
+```bash
+pip install -r requirements.txt -r requirements-video.txt
+pip install "kokoro>=0.8" numpy
 ```
 
 ### Generating Videos
@@ -134,7 +176,7 @@ make video-silent
 # Generate in high quality (1080p)
 make video-hq
 
-# Generate using Kokoro TTS (local, no internet needed)
+# Generate using Kokoro TTS (local after the first-time asset download)
 make video-kokoro
 make video-kokoro exercise=01_basic
 ```
@@ -182,7 +224,7 @@ The audit tool uses heuristics to detect code-like tokens (dotted access, snake_
 
 | Feature | edge-tts (default) | Kokoro |
 |---------|-------------------|--------|
-| Requires internet | Yes | No |
+| Requires internet | Yes | First run only, then cached |
 | API key needed | No | No |
 | Output format | MP3 | WAV |
 | Voice quality | Good (neural) | Good (StyleTTS2) |
@@ -203,6 +245,6 @@ YAML Spec → Pronunciation Preprocessing → TTS Audio → Timing Calculation
 
 ## Stack
 
-- Python 3.12 + Django 5.x + Strawberry GraphQL
+- Python 3.10+ locally (Docker image uses Python 3.12) + Django 5.x + Strawberry GraphQL
 - PostgreSQL 16
 - Docker Compose

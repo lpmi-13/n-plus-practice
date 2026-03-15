@@ -1,0 +1,29 @@
+[project]
+name = "n-plus-practice"
+version = "0.1.0"
+description = "Hands-on practice environment for spotting and fixing N+1 queries in Django and GraphQL."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT" }
+dependencies = [
+    "Django==5.1.4",
+    "strawberry-graphql[django]==0.254.1",
+    "psycopg2-binary==2.9.10",
+    "django-extensions==3.2.3",
+    "pytest==8.3.4",
+    "pytest-django==4.9.0",
+]
+
+[project.optional-dependencies]
+video = [
+    "manim>=0.18.0",
+    "pydantic>=2.0,<2.11",
+    "pyyaml>=6.0",
+    "edge-tts>=6.1",
+    "soundfile>=0.12",
+]
+kokoro = [
+    "kokoro>=0.8",
+    "numpy",
+    "pip",
+]

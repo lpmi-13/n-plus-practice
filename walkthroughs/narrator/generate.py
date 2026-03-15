@@ -39,14 +39,18 @@ def _generate_kokoro(
     """Generate audio using Kokoro (local, CPU-friendly, Apache 2.0).
 
     Requires:
-        pip install kokoro>=0.8 soundfile
+        uv sync --extra video --extra kokoro
+        # or
+        pip install -r requirements-video.txt "kokoro>=0.8" numpy
     """
     try:
         from kokoro import KPipeline
     except ImportError as exc:
         raise RuntimeError(
             "Kokoro is not installed.  Install with:\n"
-            "  pip install kokoro>=0.8 soundfile\n"
+            "  uv sync --extra video --extra kokoro\n"
+            "  # or\n"
+            '  pip install -r requirements-video.txt "kokoro>=0.8" numpy\n'
             "Or use --tts-backend edge (the default)."
         ) from exc
 
