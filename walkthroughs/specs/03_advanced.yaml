@@ -1,0 +1,154 @@
+exercise: "03_advanced"
+title: "Fixing GraphQL Fan-out with DataLoaders"
+duration_target: "4-6 minutes"
+
+segments:
+  - type: "intro"
+    narration: >
+      In this final walkthrough, we'll tackle the hardest N plus 1 pattern.
+      When a GraphQL query fans out across categories, products, reviews,
+      and authors, we get over 100 database queries. We'll fix this using
+      Strawberry DataLoaders, which batch individual lookups into efficient
+      bulk queries.
+    visual: "title_card"
+    title: "Exercise 03: DataLoaders for GraphQL"
+
+  - type: "terminal_output"
+    content: |
+      {
+        categories {
+          name
+          products {
+            name
+            reviews {
+              text
+              rating
+              author { name }
+            }
+            variants { size color }
+          }
+        }
+      }
+    narration: >
+      Here's the full-depth GraphQL query that causes the problem. It
+      traverses four levels deep: categories to products to reviews to
+      authors, plus variants on the side. Each level triggers its own
+      N plus 1 pattern, and they multiply together.
+
+  - type: "terminal_output"
+    content: |
+      $ python manage.py check_queries full_depth
+
+        [NEEDS FIX] full_depth
+           Exercise:  03 (Advanced)
+           Queries:   179 (target: <= 5)
+    narration: >
+      Our query counter shows 179 queries! That's 1 for categories, 5 for
+      products, 30 for variants, 30 for reviews, and over 100 for authors.
+      The fan-out at each level multiplies the problem.
+
+  - type: "code_display"
+    file: "catalog/schema.py"
+    lines: [26, 30]
+    highlight_lines: [29]
+    narration: >
+      The deepest N plus 1 is in the ReviewType author resolver. For every
+      single review, it accesses self dot author, which triggers a lazy
+      foreign key load. With 100 reviews, that's 100 extra queries just
+      for authors.
+    annotation: "100+ queries just for this field!"
+
+  - type: "code_diff"
+    file: "catalog/dataloaders.py"
+    before: |
+      """
+      DataLoader implementations for fixing N+1 query problems.
+      This file is a starting scaffold for Exercise 03.
+      """
+    after: |
+      from collections import defaultdict
+      from strawberry.dataloader import DataLoader
+      from catalog.models import Author, Product, Review, Variant
+
+      async def load_products_by_category(keys):
+          products = Product.objects.filter(category_id__in=keys)
+          grouped = defaultdict(list)
+          for p in products:
+              grouped[p.category_id].append(p)
+          return [grouped.get(k, []) for k in keys]
+
+      async def load_variants_by_product(keys):
+          variants = Variant.objects.filter(product_id__in=keys)
+          grouped = defaultdict(list)
+          for v in variants:
+              grouped[v.product_id].append(v)
+          return [grouped.get(k, []) for k in keys]
+
+      async def load_reviews_by_product(keys):
+          reviews = Review.objects.filter(product_id__in=keys)
+          grouped = defaultdict(list)
+          for r in reviews:
+              grouped[r.product_id].append(r)
+          return [grouped.get(k, []) for k in keys]
+
+      async def load_authors(keys):
+          authors = Author.objects.filter(id__in=keys)
+          author_map = {a.id: a for a in authors}
+          return [author_map[k] for k in keys]
+    narration: >
+      The solution is DataLoaders. A DataLoader collects individual lookup
+      requests and batches them into a single query. We create four loaders,
+      one for each relationship. Each loader takes a list of IDs, queries
+      the database once with an IN clause, and groups the results back by
+      key. The key insight is that DataLoaders work within a single GraphQL
+      request. When multiple resolvers all call loader dot load, the
+      DataLoader waits until all requests in the current batch are collected,
+      then executes one query for all of them.
+
+  - type: "terminal_output"
+    content: |
+      Without DataLoaders:
+        resolve author for review 1  → SELECT ... WHERE id = 7
+        resolve author for review 2  → SELECT ... WHERE id = 3
+        resolve author for review 3  → SELECT ... WHERE id = 7
+        ... (100 separate queries)
+
+      With DataLoaders:
+        DataLoader collects keys [7, 3, 7, 5, 2, ...]
+        → SELECT ... WHERE id IN (7, 3, 5, 2, ...)
+        (1 query, results cached and distributed)
+    narration: >
+      Here's the difference visually. Without DataLoaders, each resolver
+      fires its own query. With DataLoaders, all the IDs are collected
+      and fetched in a single bulk query. The results are cached, so if
+      the same author appears in multiple reviews, only one fetch happens.
+
+  - type: "terminal_output"
+    content: |
+      $ python manage.py check_queries full_depth
+
+        [PASS] full_depth
+           Exercise:  03 (Advanced)
+           Queries:   5 (target: <= 5)
+
+      $ python manage.py check_queries average_rating
+
+        [PASS] average_rating
+           Exercise:  03 (Advanced)
+           Queries:   2 (target: <= 2)
+    narration: >
+      After implementing all four DataLoaders and updating the resolvers,
+      our full-depth query drops from 179 queries to just 5. One for
+      categories, one for products, one for variants, one for reviews,
+      and one for authors. The average rating query also drops from 31
+      to just 2.
+
+  - type: "outro"
+    narration: >
+      DataLoaders are essential for GraphQL APIs. They solve the
+      fundamental tension between GraphQL's field-level resolution
+      and efficient database access. The batching happens automatically.
+      You just call loader dot load with a key, and the DataLoader
+      handles the rest. Congratulations on completing all three exercises!
+    visual: "title_card"
+    title: "All Exercises Complete!"

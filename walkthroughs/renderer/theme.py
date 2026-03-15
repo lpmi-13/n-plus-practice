@@ -1,0 +1,34 @@
+"""Visual theme constants for walkthrough videos."""
+
+from manim import *
+
+# Colors — VS Code Dark+ inspired
+BG_COLOR = "#1e1e1e"
+CODE_BG = "#252526"
+TERMINAL_BG = "#0c0c0c"
+TEXT_COLOR = "#d4d4d4"
+KEYWORD_COLOR = "#569cd6"
+STRING_COLOR = "#ce9178"
+COMMENT_COLOR = "#6a9955"
+FUNCTION_COLOR = "#dcdcaa"
+HIGHLIGHT_COLOR = "#264f78"
+ANNOTATION_COLOR = "#4ec9b0"
+DIFF_ADD_COLOR = "#2ea04370"
+DIFF_DEL_COLOR = "#f8514970"
+ACCENT_COLOR = "#007acc"
+TITLE_COLOR = "#ffffff"
+SUBTITLE_COLOR = "#cccccc"
+
+# Layout
+FRAME_WIDTH = 14.2
+FRAME_HEIGHT = 8.0
+CODE_AREA_WIDTH = 12.0
+CODE_AREA_HEIGHT = 6.0
+PADDING = 0.4
+
+# Font sizes
+TITLE_FONT_SIZE = 48
+SUBTITLE_FONT_SIZE = 28
+CODE_FONT_SIZE = 20
+ANNOTATION_FONT_SIZE = 22
+TERMINAL_FONT_SIZE = 20
