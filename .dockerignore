@@ -1,0 +1,10 @@
+.git*
+*.md
+
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+LICENSE
+Makefile
+tests
