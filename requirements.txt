@@ -2,6 +2,5 @@ Django==5.1.4
 strawberry-graphql[django]==0.254.1
 psycopg2-binary==2.9.10
 django-extensions==3.2.3
-django-debug-toolbar==4.4.6
 pytest==8.3.4
 pytest-django==4.9.0

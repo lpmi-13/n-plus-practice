@@ -1,64 +1,81 @@
+import datetime
 from decimal import Decimal
 from typing import Optional
 
 import strawberry
-import strawberry.django
-from strawberry import auto
+from strawberry import Private
 
 from catalog import models
 
 
-@strawberry.django.type(models.Author)
+@strawberry.type
 class AuthorType:
-    id: auto
-    name: auto
-    email: auto
+    id: strawberry.ID
+    name: str
+    email: str
 
 
-@strawberry.django.type(models.Review)
+@strawberry.type
 class ReviewType:
-    id: auto
-    rating: auto
-    text: auto
-    created_at: auto
+    id: strawberry.ID
+    rating: int
+    text: str
+    created_at: datetime.datetime
+    _author: Private[object]  # Django Author instance, not exposed in schema
 
     # N+1: Each review triggers a separate query to fetch its author
     @strawberry.field
     def author(self) -> AuthorType:
-        return self.author
+        author = self._author
+        return AuthorType(id=author.id, name=author.name, email=author.email)
 
 
-@strawberry.django.type(models.Variant)
+@strawberry.type
 class VariantType:
-    id: auto
-    size: auto
-    color: auto
-    sku: auto
-    stock: auto
+    id: strawberry.ID
+    size: str
+    color: str
+    sku: str
+    stock: int
 
 
-@strawberry.django.type(models.Product)
+@strawberry.type
 class ProductType:
-    id: auto
-    name: auto
-    description: auto
+    id: strawberry.ID
+    name: str
+    description: str
     price: Decimal
-    created_at: auto
+    created_at: datetime.datetime
+    _product: Private[object]  # Django Product instance, not exposed in schema
 
     # N+1: Each product triggers a separate query to fetch its variants
     @strawberry.field
     def variants(self) -> list[VariantType]:
-        return self.variants.all()
+        return [
+            VariantType(
+                id=v.id, size=v.size, color=v.color, sku=v.sku, stock=v.stock
+            )
+            for v in self._product.variants.all()
+        ]
 
     # N+1: Each product triggers a separate query to fetch its reviews
     @strawberry.field
     def reviews(self) -> list[ReviewType]:
-        return self.reviews.all()
+        return [
+            ReviewType(
+                id=r.id,
+                rating=r.rating,
+                text=r.text,
+                created_at=r.created_at,
+                _author=r.author,
+            )
+            for r in self._product.reviews.all()
+        ]
 
     # N+1: Computes average by loading all reviews via Python
     @strawberry.field
     def average_rating(self) -> Optional[float]:
-        reviews = list(self.reviews.all())
+        reviews = list(self._product.reviews.all())
         if not reviews:
             return None
         return sum(r.rating for r in reviews) / len(reviews)
@@ -66,35 +83,57 @@ class ProductType:
     # N+1: Each product triggers a separate query to fetch its category
     @strawberry.field
     def category(self) -> "CategoryType":
-        return self.category
+        cat = self._product.category
+        return CategoryType(
+            id=cat.id, name=cat.name, description=cat.description, _category=cat
+        )
 
 
-@strawberry.django.type(models.Category)
+@strawberry.type
 class CategoryType:
-    id: auto
-    name: auto
-    description: auto
+    id: strawberry.ID
+    name: str
+    description: str
+    _category: Private[object]  # Django Category instance, not exposed in schema
 
     # N+1: Each category triggers a separate query to fetch its products
     @strawberry.field
     def products(self) -> list[ProductType]:
-        return self.products.all()
+        return [_product_to_type(p) for p in self._category.products.all()]
+
+
+def _product_to_type(p: models.Product) -> ProductType:
+    """Convert a Django Product model instance to a ProductType."""
+    return ProductType(
+        id=p.id,
+        name=p.name,
+        description=p.description,
+        price=p.price,
+        created_at=p.created_at,
+        _product=p,
+    )
 
 
 @strawberry.type
 class Query:
     @strawberry.field
     def categories(self) -> list[CategoryType]:
-        return models.Category.objects.all()
+        return [
+            CategoryType(
+                id=c.id, name=c.name, description=c.description, _category=c
+            )
+            for c in models.Category.objects.all()
+        ]
 
     @strawberry.field
     def products(self) -> list[ProductType]:
-        return models.Product.objects.all()
+        return [_product_to_type(p) for p in models.Product.objects.all()]
 
     @strawberry.field
     def product(self, id: strawberry.ID) -> Optional[ProductType]:
         try:
-            return models.Product.objects.get(pk=id)
+            p = models.Product.objects.get(pk=id)
+            return _product_to_type(p)
         except models.Product.DoesNotExist:
             return None
 
