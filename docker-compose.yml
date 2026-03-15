@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: nplus
+      POSTGRES_USER: nplus
+      POSTGRES_PASSWORD: nplus
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  web:
+    build: .
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgres://nplus:nplus@db:5432/nplus
+      DJANGO_SETTINGS_MODULE: config.settings
+      SHOW_SQL: "1"
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
