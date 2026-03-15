@@ -1,0 +1,108 @@
+exercise: "01_basic"
+title: "Fixing N+1 Queries with select_related"
+duration_target: "3-5 minutes"
+
+segments:
+  - type: "intro"
+    narration: >
+      In this walkthrough, we'll fix an N+1 query problem in our product listing.
+      We have a Django and GraphQL app where fetching products with their categories
+      triggers 31 separate database queries instead of just one or two.
+      Let's start by looking at the problem.
+    visual: "title_card"
+    title: "Exercise 01: Fixing N+1 with select_related"
+
+  - type: "code_display"
+    file: "catalog/schema.py"
+    lines: [128, 131]
+    highlight_lines: [130]
+    narration: >
+      Here's our root products query. It calls Product.objects.all with no
+      optimization. Django fetches all products, but it doesn't know we'll
+      also need each product's category.
+    annotation: "No select_related — each category access triggers a new query"
+
+  - type: "code_display"
+    file: "catalog/schema.py"
+    lines: [83, 89]
+    highlight_lines: [86]
+    narration: >
+      And here's the category resolver on ProductType. When GraphQL resolves
+      this field for each product, it accesses self dot product dot category.
+      This is a lazy foreign key load. Django hasn't fetched the category yet,
+      so it fires a separate SELECT query for every single product.
+    annotation: "Lazy FK load — one query per product!"
+
+  - type: "terminal_output"
+    content: |
+      $ python manage.py check_queries products_with_category
+
+        [NEEDS FIX] products_with_category
+           Exercise:  01 (Basic)
+           Queries:   31 (target: <= 2)
+    narration: >
+      When we run our query counter, we see 31 queries for 30 products.
+      That's one query to fetch all products, plus 30 additional queries,
+      one for each product's category. This is the classic N plus 1 pattern.
+
+  - type: "terminal_output"
+    content: |
+      SELECT * FROM catalog_product;
+      SELECT * FROM catalog_category WHERE id = 1;
+      SELECT * FROM catalog_category WHERE id = 2;
+      SELECT * FROM catalog_category WHERE id = 3;
+      ...repeated 30 times...
+    narration: >
+      Looking at the actual SQL, we can see the pattern clearly. First, one
+      query fetches all products. Then for each product, a separate query
+      fetches its category by ID. With 30 products, that's 31 total queries.
+
+  - type: "code_diff"
+    file: "catalog/schema.py"
+    before: |
+      @strawberry.field
+      def products(self) -> list[ProductType]:
+          return [_product_to_type(p) for p in models.Product.objects.all()]
+    after: |
+      @strawberry.field
+      def products(self) -> list[ProductType]:
+          return [
+              _product_to_type(p)
+              for p in models.Product.objects.select_related("category").all()
+          ]
+    narration: >
+      The fix is simple. We add select_related with the string "category" to
+      our queryset. This tells Django to use a SQL JOIN to fetch each product's
+      category in the same query. Now when the category resolver accesses
+      self dot product dot category, the data is already loaded in memory.
+      No additional query is needed.
+
+  - type: "terminal_output"
+    content: |
+      SELECT catalog_product.*, catalog_category.*
+      FROM catalog_product
+      INNER JOIN catalog_category
+        ON (catalog_product.category_id = catalog_category.id);
+    narration: >
+      Now Django generates a single query with an INNER JOIN. All products
+      and their categories are fetched in one round trip to the database.
+
+  - type: "terminal_output"
+    content: |
+      $ python manage.py check_queries products_with_category
+
+        [PASS] products_with_category
+           Exercise:  01 (Basic)
+           Queries:   1 (target: <= 2)
+    narration: >
+      Let's verify. Our query counter now shows just 1 query, well within
+      the target of 2 or fewer. That's a 31x reduction!
+
+  - type: "outro"
+    narration: >
+      That's select_related. Use it whenever you're traversing a ForeignKey
+      or OneToOneField relationship. It's the simplest and most effective
+      tool for fixing N plus 1 on single-valued relations. In the next
+      exercise, we'll tackle reverse relations with prefetch_related.
+    visual: "title_card"
+    title: "Exercise 01 Complete"

@@ -1,0 +1,124 @@
+exercise: "02_intermediate"
+title: "Fixing Nested N+1 with prefetch_related"
+duration_target: "3-5 minutes"
+
+segments:
+  - type: "intro"
+    narration: >
+      In this walkthrough, we'll fix a nested N plus 1 problem. When we query
+      categories with their products and variants, the queries explode at two
+      levels. We'll use Django's prefetch_related to solve this.
+    visual: "title_card"
+    title: "Exercise 02: Fixing N+1 with prefetch_related"
+
+  - type: "code_display"
+    file: "catalog/schema.py"
+    lines: [117, 126]
+    highlight_lines: [125]
+    narration: >
+      Here's the root categories query. Like before, it uses a bare
+      objects dot all with no optimization. Django will fetch all categories,
+      but it doesn't know we need each category's products too.
+    annotation: "No prefetch — triggers N+1 at multiple levels"
+
+  - type: "code_display"
+    file: "catalog/schema.py"
+    lines: [99, 102]
+    highlight_lines: [102]
+    narration: >
+      The CategoryType products resolver calls self dot category dot products
+      dot all. This is a reverse foreign key relationship. For each category,
+      Django fires a separate query to fetch its products.
+    annotation: "Reverse FK — one query per category"
+
+  - type: "code_display"
+    file: "catalog/schema.py"
+    lines: [51, 59]
+    highlight_lines: [58]
+    narration: >
+      And then the ProductType variants resolver does the same thing at the
+      next level. For each product, it queries for variants separately. So
+      we have N plus 1 at the category level, and then N plus 1 again at
+      the product level.
+    annotation: "Another N+1 — one query per product for variants"
+
+  - type: "terminal_output"
+    content: |
+      $ python manage.py check_queries categories_products_variants
+
+        [NEEDS FIX] categories_products_variants
+           Exercise:  02 (Intermediate)
+           Queries:   36 (target: <= 3)
+    narration: >
+      Our query counter shows 36 queries. That's 1 for categories, 5 for
+      products (one per category), and 30 for variants (one per product).
+      With more data, this would get even worse.
+
+  - type: "code_diff"
+    file: "catalog/schema.py"
+    before: |
+      @strawberry.field
+      def categories(self) -> list[CategoryType]:
+          return [
+              CategoryType(
+                  id=c.id, name=c.name, description=c.description, _category=c
+              )
+              for c in models.Category.objects.all()
+          ]
+    after: |
+      @strawberry.field
+      def categories(self) -> list[CategoryType]:
+          return [
+              CategoryType(
+                  id=c.id, name=c.name, description=c.description, _category=c
+              )
+              for c in models.Category.objects.prefetch_related(
+                  "products", "products__variants"
+              ).all()
+          ]
+    narration: >
+      The fix uses prefetch_related instead of select_related. Why?
+      Because products and variants are reverse foreign key relationships,
+      meaning one-to-many. Select_related only works for forward
+      single-valued relationships. Prefetch_related handles the one-to-many
+      case by executing a separate efficient query with an IN clause,
+      then joining the results in Python. We use the double-underscore
+      syntax to prefetch nested relations in one call.
+
+  - type: "terminal_output"
+    content: |
+      -- Query 1: All categories
+      SELECT * FROM catalog_category;
+
+      -- Query 2: All products for those categories
+      SELECT * FROM catalog_product
+        WHERE category_id IN (1, 2, 3, 4, 5);
+
+      -- Query 3: All variants for those products
+      SELECT * FROM catalog_variant
+        WHERE product_id IN (1, 2, 3, ..., 30);
+    narration: >
+      Now Django runs exactly 3 queries. One for all categories, one for
+      all their products using an IN clause, and one for all variants
+      using another IN clause. When the resolvers access products dot all
+      and variants dot all, Django returns the cached prefetch results.
+
+  - type: "terminal_output"
+    content: |
+      $ python manage.py check_queries categories_products_variants
+
+        [PASS] categories_products_variants
+           Exercise:  02 (Intermediate)
+           Queries:   3 (target: <= 3)
+    narration: >
+      Our query counter confirms 3 queries, right at our target.
+      We reduced from 36 queries to 3.
+
+  - type: "outro"
+    narration: >
+      That's prefetch_related. Use it for reverse ForeignKey and
+      ManyToMany relationships. The double-underscore syntax lets you
+      prefetch nested relations efficiently. In the next exercise, we'll
+      tackle the hardest case: GraphQL-specific fan-out with DataLoaders.
+    visual: "title_card"
+    title: "Exercise 02 Complete"

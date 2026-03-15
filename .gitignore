@@ -39,3 +39,7 @@ Thumbs.db
 .pytest_cache/
 htmlcov/
 .coverage
+
+# Video pipeline output
+walkthroughs/output/
+media/
