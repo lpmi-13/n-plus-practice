@@ -1,4 +1,4 @@
-.PHONY: setup seed test check start stop logs shell migrate video video-silent
+.PHONY: setup seed test check start stop logs shell migrate video video-silent audit-pronunciation
 
 ## Start the environment (Docker Compose up)
 start:
@@ -76,3 +76,15 @@ video-validate:
 		echo "Validating $$f..."; \
 		python -m walkthroughs.cli validate --spec "$$f"; \
 	done
+
+## Audit narration text for pronunciation gaps
+audit-pronunciation:
+	python -m walkthroughs.cli audit-pronunciation --show-transformed
+
+## Generate video with Kokoro TTS (usage: make video-kokoro exercise=01_basic)
+video-kokoro:
+ifdef exercise
+	python -m walkthroughs.cli generate --exercise $(exercise) --tts-backend kokoro --quality low
+else
+	python -m walkthroughs.cli generate --all --tts-backend kokoro --quality low
+endif

@@ -3,3 +3,7 @@ pydantic>=2.0
 pyyaml>=6.0
 edge-tts>=6.1
 soundfile>=0.12
+# Optional: Kokoro TTS (local, CPU-friendly, Apache 2.0)
+# Uncomment to enable --tts-backend kokoro
+# kokoro>=0.8
+# numpy

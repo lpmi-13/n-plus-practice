@@ -6,6 +6,9 @@ Usage:
     python -m walkthroughs.cli generate --exercise 01_basic
     python -m walkthroughs.cli generate --all
     python -m walkthroughs.cli generate --exercise 01_basic --no-audio
+    python -m walkthroughs.cli generate --exercise 01_basic --tts-backend kokoro
+    python -m walkthroughs.cli audit-pronunciation
+    python -m walkthroughs.cli audit-pronunciation --show-transformed
 """
 
 import argparse
@@ -58,6 +61,22 @@ def cmd_validate(args):
         sys.exit(1)
 
 
+def cmd_audit(args):
+    """Audit narration text for pronunciation gaps."""
+    from walkthroughs.narrator.audit_pronunciation import audit_specs, print_report
+
+    spec_paths = None
+    if args.spec:
+        path = Path(args.spec)
+        if not path.exists():
+            print(f"Error: spec not found: {args.spec}")
+            sys.exit(1)
+        spec_paths = [path]
+
+    report = audit_specs(spec_paths)
+    print_report(report, show_transformed=args.show_transformed)
+
+
 def cmd_generate(args):
     """Generate walkthrough video(s)."""
     from walkthroughs.renderer import load_spec
@@ -97,14 +116,24 @@ def cmd_generate(args):
 
         audio_dir = OUTPUT_DIR / f"{spec.exercise}_audio"
 
+        tts_backend = getattr(args, "tts_backend", "edge")
+        tts_voice = getattr(args, "voice", None)
+        tts_speed = getattr(args, "speed", 1.0)
+
         # Step 1: Generate audio (unless --no-audio)
         if no_audio:
             print("\nSkipping audio generation (--no-audio)")
             audio_files = [None] * len(spec.segments)
             durations = None
         else:
-            print("\nStep 1: Generating narration audio...")
-            audio_files = generate_narration(spec.segments, audio_dir)
+            print(f"\nStep 1: Generating narration audio (backend={tts_backend})...")
+            audio_files = generate_narration(
+                spec.segments,
+                audio_dir,
+                backend=tts_backend,
+                voice=tts_voice,
+                speed=tts_speed,
+            )
             print("\nStep 2: Calculating segment timing from audio...")
             durations = calculate_durations(audio_files)
             for i, (d, seg) in enumerate(zip(durations, spec.segments)):
@@ -154,6 +183,38 @@ def main():
         default="low",
         help="Video quality (default: low)",
     )
+    gen_parser.add_argument(
+        "--tts-backend",
+        choices=["edge", "kokoro"],
+        default="edge",
+        help="TTS backend (default: edge)",
+    )
+    gen_parser.add_argument(
+        "--voice",
+        default=None,
+        help="Voice name/ID (default depends on backend)",
+    )
+    gen_parser.add_argument(
+        "--speed",
+        type=float,
+        default=1.0,
+        help="Speaking speed multiplier, Kokoro only (default: 1.0)",
+    )
+
+    # audit-pronunciation
+    audit_parser = subparsers.add_parser(
+        "audit-pronunciation",
+        help="Audit narration text for pronunciation gaps",
+    )
+    audit_parser.add_argument(
+        "--spec",
+        help="Path to a specific YAML spec (default: all)",
+    )
+    audit_parser.add_argument(
+        "--show-transformed",
+        action="store_true",
+        help="Show before/after transformation for each narration",
+    )
 
     args = parser.parse_args()
 
@@ -163,6 +224,8 @@ def main():
         cmd_validate(args)
     elif args.command == "generate":
         cmd_generate(args)
+    elif args.command == "audit-pronunciation":
+        cmd_audit(args)
     else:
         parser.print_help()
         sys.exit(1)
